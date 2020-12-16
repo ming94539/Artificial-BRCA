@@ -15,8 +15,12 @@ plt.switch_backend('agg')
 from tensorflow.keras import regularizers
 from tensorflow.keras.utils import multi_gpu_model
 from sklearn.decomposition import PCA
+import time
 
-inpt = "../f5_chr17_brca1_copd_hmb_real.hapt"
+start_t = time.time()
+
+
+inpt = "f8_chr13_brca2_copd_hmb.hapt"
 #inpt = "1000G_real_genomes/805_SNP_1000G_real.hapt" #hapt format input file
 latent_size = 600 #size of noise input
 alph = 0.01 #alpha value for LeakyReLU
@@ -24,30 +28,47 @@ g_learn = 0.0001 #generator learning rate
 #g_learn = 0.0001
 #d_learn = 0.0008
 d_learn = 0.0008 #discriminator learning rate
-epochs = 500
+epochs = 1001
 batch_size = 32
 ag_size = 216 #number of artificial genomes (haplotypes) to be created
 gpu_count = 0 #number of GPUs
-save_that = 50 #epoch interval for saving outputs
+save_that = 100 #epoch interval for saving outputs
 
 #For saving models
 def save_mod(gan, gen, disc, epo):
     discriminator.trainable = False
-    save_model(gan, epo+"_gan")
+    save_model(gan, 'Saved_Stuff/'+epo+"_gan")
     discriminator.trainable = True
-    save_model(gen, epo+"_generator")
-    save_model(disc, epo+"_discriminator")
+    save_model(gen, 'Saved_Stuff/'+epo+"_generator")
+    save_model(disc, 'Saved_Stuff/'+epo+"_discriminator")
 
 
 #Read input
 df = pd.read_csv(inpt, sep = ' ', header=None)
-df = df.sample(frac=1).reset_index(drop=True)
-df = df.iloc[:2500,:5000]
+df = df.sample(frac=1).reset_index(drop=True) #To randomize the samples, rows are switched arond randomly. The reset_index just makes the index back into sequential order (the randomization of rows, will obviously change the row index too)
 df_noname = df.drop(df.columns[0:2], axis=1)
+#df_noname = df_noname.iloc[:5008,:805]
+
+counter = 0
+i = 0
+dropped = []
+output = {}
+while i < df_noname.shape[1] and counter < 2000:
+    if not (df_noname.iloc[:,i] == 0).all():
+         output[counter] = df_noname.iloc[:,i].tolist()
+         counter+=1
+    else:
+         dropped.append(i) 
+    i+=1
+
+df_noname = pd.DataFrame(output)
+print('number of columns dropped',len(dropped))
+print('number of columns kept',df_noname.shape[1])
+
 df_noname = df_noname.values
 df_noname = df_noname - np.random.uniform(0,0.1, size=(df_noname.shape[0], df_noname.shape[1]))
 df_noname = pd.DataFrame(df_noname)
-
+#df = df_noname #To make the columns equal for the PCA plotting,not sure why this wasn't necessary when just selcting a portion of df_noname directly e.g. df_noname.iloc[:5008,:805] but start having column mistmatch problem for PCA at line 165 when choosing the columns without all zeroes
 
 K.clear_session()
 
@@ -73,7 +94,7 @@ discriminator.compile(optimizer=Adam(lr=d_learn), loss='binary_crossentropy')
 discriminator.trainable = False
 
 #Make GAN
-gan = Sequential()
+gan= Sequential()
 gan.add(generator)
 gan.add(discriminator)
 if gpu_count > 1:
@@ -125,23 +146,27 @@ for e in range(epochs):
         df.columns = list(range(df.shape[1]))
 
         #Output AGs in hapt format
-        generated_genomes_df.to_csv(str(e)+"_output.hapt", sep=" ", header=False, index=False)
+        generated_genomes_df.to_csv('Saved_Stuff/'+str(e)+"_output.hapt", sep=" ", header=False, index=False)
 
         #Output lossess
-        pd.DataFrame(losses).to_csv(str(e)+"_losses.txt", sep=" ", header=False, index=False)
+        pd.DataFrame(losses).to_csv('Saved_Stuff/'+str(e)+"_losses.txt", sep=" ", header=False, index=False)
         fig, ax = plt.subplots()
         plt.plot(np.array([losses]).T[0], label='Discriminator')
         plt.plot(np.array([losses]).T[1], label='Generator')
         plt.title("Training Losses")
         plt.legend()
-        fig.savefig(str(e)+'_loss.pdf', format='pdf')
+        fig.savefig('Saved_Stuff/'+str(e)+'_loss.pdf', format='pdf')
 
         #Make PCA
-        df_pca = df.drop(df.columns[1], axis=1)
-        df_pca.columns = list(range(df_pca.shape[1]))
+		#shouldn't this be df_noname instead?This part will be changed
+        #df_pca = df.drop(df.columns[1], axis=1) #Drop column at index 1
+        df_pca = df_noname.copy()
+        df_pca = df_pca.insert(loc=0,column='Temp',value=0)
+        df_pca.columns = list(df_pca.shape[0]) #HARD CODED FOR NOW
+        #df_pca.columns = list(range(df_pca.shape[1])) #Reset the index in sequential order, since missing column 1, 
         df_pca.iloc[:,0] = 'Real'
         generated_genomes_pca = generated_genomes_df.drop(generated_genomes_df.columns[1], axis=1)
-        generated_genomes_pca.columns = list(range(df_pca.shape[1]))
+        generated_genomes_pca.columns = list(range(df_pca.shape[0]))
         df_all_pca = pd.concat([df_pca, generated_genomes_pca])
         pca = PCA(n_components=2)
         PCs = pca.fit_transform(df_all_pca.drop(df_all_pca.columns[0], axis=1))
@@ -160,4 +185,9 @@ for e in range(epochs):
                        , c = color
                        , s = 50, alpha=0.2)
         ax.legend(pops)
-        fig.savefig(str(e)+'_pca.pdf', format='pdf')
+        fig.savefig('Saved_Stuff/'+str(e)+'_pca.pdf', format='pdf')
+end_t = time.time()
+duration = end_t - start_t
+print('number of columns dropped',len(dropped))
+print('number of columns kept',df_noname.shape[1])
+print(duration//60,'minutes')
