@@ -20,5 +20,5 @@ cd Artificial-BRCA
 ```
 Recommend creating a virtual environment to keep your dependencies isolated. 
 ```
-pip3 install -r artificial-genomes-venv-requirements.txt
+pip3 install -r artificial-genome-venv-req.txt
 ```
