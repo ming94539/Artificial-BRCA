@@ -13,3 +13,12 @@ Check out the presentation slides: https://docs.google.com/presentation/d/15bzOx
 
 ## Running the code
 
+
+```
+git clone https://github.com/ming94539/Artificial-BRCA
+cd Artificial-BRCA
+```
+Recommend creating a virtual environment to keep your dependencies isolated. 
+```
+pip3 install -r artificial-genomes-venv-requirements.txt
+```
